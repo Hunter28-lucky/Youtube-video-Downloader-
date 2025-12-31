@@ -52,10 +52,13 @@ export async function POST(request: NextRequest) {
       ]
     }, {
       binaryPath: '/Users/krishyogi/.pyenv/shims/yt-dlp'
-    });
+    } as any);
+
+    // Type assertion for info object
+    const videoInfo = info as any;
 
     // Filter video formats (with both video and audio)
-    const videoFormats: VideoFormat[] = (info.formats || [])
+    const videoFormats: VideoFormat[] = (videoInfo.formats || [])
       .filter((f: any) => f.vcodec !== 'none' && f.acodec !== 'none' && f.height)
       .map((f: any) => ({
         quality: f.format_id,
@@ -84,7 +87,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Filter audio-only formats
-    const audioFormats: VideoFormat[] = (info.formats || [])
+    const audioFormats: VideoFormat[] = (videoInfo.formats || [])
       .filter((f: any) => f.vcodec === 'none' && f.acodec !== 'none' && f.abr)
       .map((f: any) => ({
         quality: `${Math.round(f.abr)}kbps`,
@@ -99,10 +102,10 @@ export async function POST(request: NextRequest) {
       .slice(0, 3);
 
     const response: VideoInfo = {
-      title: info.title || 'Unknown',
-      thumbnail: info.thumbnail || '',
-      duration: formatDuration(info.duration || 0),
-      author: info.uploader || info.channel || 'Unknown',
+      title: videoInfo.title || 'Unknown',
+      thumbnail: videoInfo.thumbnail || '',
+      duration: formatDuration(videoInfo.duration || 0),
+      author: videoInfo.uploader || videoInfo.channel || 'Unknown',
       formats: uniqueVideoFormats,
       audioFormats: audioFormats,
     };

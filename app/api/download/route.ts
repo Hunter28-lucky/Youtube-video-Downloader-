@@ -29,7 +29,10 @@ export async function GET(request: NextRequest) {
             noWarnings: true,
         }, {
             binaryPath: '/Users/krishyogi/.pyenv/shims/yt-dlp'
-        });
+        } as any);
+
+        // Type assertion for info object
+        const videoData = info as any;
 
         // Determine format selector
         let formatSelector: string;
@@ -44,7 +47,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Create filename
-        const sanitizedTitle = (info.title || 'video')
+        const sanitizedTitle = (videoData.title || 'video')
             .replace(/[^\w\s-]/g, '')
             .replace(/\s+/g, '_')
             .substring(0, 50);
@@ -64,7 +67,7 @@ export async function GET(request: NextRequest) {
             ]
         }, {
             binaryPath: '/Users/krishyogi/.pyenv/shims/yt-dlp'
-        });
+        } as any);
 
         // Convert to web ReadableStream
         const readableStream = new ReadableStream({
