@@ -11,7 +11,35 @@ A modern web-based media downloader that supports YouTube, Instagram, Pinterest,
 - 🖱️ **Drag & Drop**: Simply drag and drop links to download
 - 💅 **Modern UI**: Beautiful gradient design with responsive layout
 
-## Installation
+## Deploy to Vercel
+
+Click the button below to deploy this application to Vercel:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Hunter28-lucky/Youtube-video-Downloader-)
+
+### Manual Vercel Deployment
+
+1. **Install Vercel CLI:**
+   ```bash
+   npm i -g vercel
+   ```
+
+2. **Login to Vercel:**
+   ```bash
+   vercel login
+   ```
+
+3. **Deploy:**
+   ```bash
+   vercel
+   ```
+
+4. **For production deployment:**
+   ```bash
+   vercel --prod
+   ```
+
+## Local Installation
 
 1. **Install Python dependencies:**
    ```bash
@@ -24,7 +52,7 @@ A modern web-based media downloader that supports YouTube, Instagram, Pinterest,
    ```
 
 3. **Open your browser:**
-   Navigate to `http://localhost:5000`
+   Navigate to `http://localhost:5001`
 
 ## Usage
 

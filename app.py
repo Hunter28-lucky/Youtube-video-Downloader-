@@ -9,6 +9,9 @@ app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max
 # Store download status
 download_status = {}
 
+# For Vercel serverless deployment
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -94,5 +97,9 @@ def tenor_search():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# For local development
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5001)
+
+# For Vercel serverless
+# Vercel will use the app object directly
