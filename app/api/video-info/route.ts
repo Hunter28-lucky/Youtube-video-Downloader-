@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ytdl from '@distube/ytdl-core';
+import youtubedl from 'youtube-dl-exec';
 
 export const runtime = 'nodejs';
-export const maxDuration = 10; // Vercel serverless timeout limit
+export const maxDuration = 10;
 
 interface VideoFormat {
   quality: string;
@@ -26,15 +26,13 @@ interface VideoInfo {
 
 /**
  * API Route: /api/video-info
- * Extracts YouTube video metadata and available formats
- * Vercel-optimized: Fast response, no file processing
+ * Extracts YouTube video metadata using youtube-dl-exec
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { url } = body;
 
-    // Validate YouTube URL
     if (!url || typeof url !== 'string' || url.trim() === '') {
       return NextResponse.json(
         { error: 'Please enter a valid YouTube URL' },
@@ -42,43 +40,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate YouTube URL format
-    if (!ytdl.validateURL(url.trim())) {
-      return NextResponse.json(
-        { error: 'Invalid YouTube URL. Please enter a valid YouTube video link.' },
-        { status: 400 }
-      );
-    }
+    // Fetch video info using youtube-dl-exec with yt-dlp
+    const info = await youtubedl(url.trim(), {
+      dumpSingleJson: true,
+      noCheckCertificates: true,
+      noWarnings: true,
+      preferFreeFormats: true,
+      addHeader: [
+        'referer:youtube.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      ]
+    }, {
+      binaryPath: '/Users/krishyogi/.pyenv/shims/yt-dlp'
+    });
 
-    // Extract video ID
-    const videoId = ytdl.getURLVideoID(url.trim());
+    // Filter video formats (with both video and audio)
+    const videoFormats: VideoFormat[] = (info.formats || [])
+      .filter((f: any) => f.vcodec !== 'none' && f.acodec !== 'none' && f.height)
+      .map((f: any) => ({
+        quality: f.format_id,
+        qualityLabel: `${f.height}p`,
+        container: f.ext || 'mp4',
+        hasVideo: true,
+        hasAudio: true,
+        url: f.url,
+        contentLength: f.filesize?.toString(),
+        mimeType: `video/${f.ext || 'mp4'}`,
+      }))
+      .sort((a: any, b: any) => {
+        const heightA = parseInt(a.qualityLabel);
+        const heightB = parseInt(b.qualityLabel);
+        return heightB - heightA; // Sort descending
+      });
 
-    // Fetch video info with timeout protection
-    const info = await Promise.race([
-      ytdl.getInfo(videoId),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Request timeout')), 8000)
-      ),
-    ]);
-
-    const videoDetails = info.videoDetails;
-
-    // Filter and organize formats for video quality options
-    const videoFormats: VideoFormat[] = ytdl
-      .filterFormats(info.formats, 'videoandaudio')
-      .filter((format) => format.qualityLabel && format.hasVideo && format.hasAudio) // Only formats with both video and audio
-      .map((format) => ({
-        quality: String(format.quality || 'unknown'),
-        qualityLabel: String(format.qualityLabel || 'Unknown'),
-        container: String(format.container || 'mp4'),
-        hasVideo: format.hasVideo,
-        hasAudio: format.hasAudio,
-        url: format.url,
-        contentLength: format.contentLength,
-        mimeType: String(format.mimeType || 'video/mp4'),
-      }));
-
-    // Remove duplicate quality labels (keep first occurrence which is usually best bitrate)
+    // Remove duplicates by quality
     const seenQualities = new Set<string>();
     const uniqueVideoFormats = videoFormats.filter((format) => {
       if (seenQualities.has(format.qualityLabel)) {
@@ -89,34 +84,25 @@ export async function POST(request: NextRequest) {
     });
 
     // Filter audio-only formats
-    const audioFormats: VideoFormat[] = ytdl
-      .filterFormats(info.formats, 'audioonly')
-      .filter((format) => format.audioBitrate) // Only formats with audio bitrate
-      .map((format) => ({
-        quality: format.audioBitrate ? `${format.audioBitrate}kbps` : 'Audio',
-        qualityLabel: format.audioBitrate ? `${format.audioBitrate}kbps` : 'Audio',
-        container: String(format.container || 'm4a'),
+    const audioFormats: VideoFormat[] = (info.formats || [])
+      .filter((f: any) => f.vcodec === 'none' && f.acodec !== 'none' && f.abr)
+      .map((f: any) => ({
+        quality: `${Math.round(f.abr)}kbps`,
+        qualityLabel: `${Math.round(f.abr)}kbps`,
+        container: f.ext || 'm4a',
         hasVideo: false,
         hasAudio: true,
-        url: format.url,
-        contentLength: format.contentLength,
-        mimeType: String(format.mimeType || 'audio/mp4'),
+        url: f.url,
+        contentLength: f.filesize?.toString(),
+        mimeType: `audio/${f.ext || 'm4a'}`,
       }))
-      .slice(0, 3); // Limit to top 3 audio formats
-
-    // Sort video formats by quality
-    const sortOrder = ['2160p', '1440p', '1080p', '720p', '480p', '360p', '240p', '144p'];
-    uniqueVideoFormats.sort((a, b) => {
-      const aIndex = sortOrder.indexOf(a.qualityLabel);
-      const bIndex = sortOrder.indexOf(b.qualityLabel);
-      return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-    });
+      .slice(0, 3);
 
     const response: VideoInfo = {
-      title: videoDetails.title,
-      thumbnail: videoDetails.thumbnails[videoDetails.thumbnails.length - 1].url,
-      duration: formatDuration(parseInt(videoDetails.lengthSeconds)),
-      author: videoDetails.author.name,
+      title: info.title || 'Unknown',
+      thumbnail: info.thumbnail || '',
+      duration: formatDuration(info.duration || 0),
+      author: info.uploader || info.channel || 'Unknown',
       formats: uniqueVideoFormats,
       audioFormats: audioFormats,
     };
@@ -130,42 +116,6 @@ export async function POST(request: NextRequest) {
     console.error('Video info extraction error:', error);
 
     if (error instanceof Error) {
-      // Log the full error for debugging
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      });
-
-      if (error.message.includes('timeout')) {
-        return NextResponse.json(
-          { error: 'Request timeout. Please try again.' },
-          { status: 504 }
-        );
-      }
-
-      if (error.message.includes('unavailable') || error.message.includes('private')) {
-        return NextResponse.json(
-          { error: 'Video is unavailable or private' },
-          { status: 403 }
-        );
-      }
-
-      if (error.message.includes('not a valid URL') || error.message.includes('Invalid URL')) {
-        return NextResponse.json(
-          { error: 'Invalid YouTube URL format' },
-          { status: 400 }
-        );
-      }
-
-      if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
-        return NextResponse.json(
-          { error: 'YouTube rate limit reached. Please try again later.' },
-          { status: 429 }
-        );
-      }
-
-      // Return the actual error message for debugging
       return NextResponse.json(
         { error: `Error: ${error.message}` },
         { status: 500 }
@@ -179,13 +129,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Helper: Format duration from seconds to HH:MM:SS or MM:SS
- */
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
+  const secs = Math.floor(seconds % 60);
 
   if (hours > 0) {
     return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
