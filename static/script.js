@@ -81,11 +81,10 @@ async function downloadFromUrl() {
         const data = await response.json();
         hideSpinner();
         
-        if (data.success && data.downloadUrl) {
+        if (data.success && data.streamUrl) {
             const a = document.createElement('a');
-            a.href = data.downloadUrl;
+            a.href = data.streamUrl + '?filename=' + encodeURIComponent(data.filename);
             a.download = data.filename || 'download';
-            a.target = '_blank';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -188,11 +187,10 @@ async function downloadYouTube() {
         const data = await response.json();
         hideSpinner();
         
-        if (data.success && data.downloadUrl) {
+        if (data.success && data.streamUrl) {
             const a = document.createElement('a');
-            a.href = data.downloadUrl;
+            a.href = data.streamUrl + '?filename=' + encodeURIComponent(data.filename);
             a.download = data.filename || 'video.mp4';
-            a.target = '_blank';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -238,11 +236,10 @@ async function downloadInstagram() {
         hideSpinner();
         
         if (data.success && data.downloadUrl) {
+            const a = document.crstreamUrl) {
             const a = document.createElement('a');
-            a.href = data.downloadUrl;
-            a.download = data.filename || 'instagram.mp4';
-            a.target = '_blank';
-            document.body.appendChild(a);
+            a.href = data.streamUrl + '?filename=' + encodeURIComponent(data.filename);
+            a.download = data.filename || 'instagram.mp4ndChild(a);
             a.click();
             document.body.removeChild(a);
             
@@ -284,11 +281,10 @@ async function downloadPinterest() {
         hideSpinner();
         
         if (data.success && data.downloadUrl) {
+            const a = document.crstreamUrl) {
             const a = document.createElement('a');
-            a.href = data.downloadUrl;
-            a.download = data.filename || 'pinterest.jpg';
-            a.target = '_blank';
-            document.body.appendChild(a);
+            a.href = data.streamUrl + '?filename=' + encodeURIComponent(data.filename);
+            a.download = data.filename || 'pinterest.jpgndChild(a);
             a.click();
             document.body.removeChild(a);
             

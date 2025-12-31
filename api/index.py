@@ -65,10 +65,15 @@ def download_media():
         # Get direct download URL
         info = get_direct_url(url, download_type, audio_only, resolution)
         
+        # Create a streaming endpoint URL
+        import base64
+        encoded_url = base64.urlsafe_b64encode(info['url'].encode()).decode()
+        filename = f"{info['title']}.{info['ext']}"
+        
         return jsonify({
             'success': True,
-            'downloadUrl': info['url'],
-            'filename': f"{info['title']}.{info['ext']}",
+            'streamUrl': f'/api/stream/{encoded_url}',
+            'filename': filename,
             'message': 'Ready to download'
         })
     
@@ -80,20 +85,28 @@ def stream_file(encoded_url):
     """Stream file directly to user's browser"""
     try:
         import base64
-        url = base64.b64decode(encoded_url).decode('utf-8')
+        url = base64.urlsafe_b64decode(encoded_url).decode('utf-8')
+        filename = request.args.get('filename', 'download')
         
-        response = requests.get(url, stream=True, timeout=30)
+        # Get file from URL with streaming
+        response = requests.get(url, stream=True, timeout=60, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
         response.raise_for_status()
         
         def generate():
-            for chunk in response.iter_content(chunk_size=8192):
+            for chunk in response.iter_content(chunk_size=65536):
                 if chunk:
                     yield chunk
         
         headers = {
-            'Content-Type': response.headers.get('Content-Type', 'application/octet-stream'),
-            'Content-Disposition': 'attachment; filename="download"'
+            'Content-Type': response.headers.get('Content-Type', 'video/mp4'),
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'Cache-Control': 'no-cache'
         }
+        
+        if 'Content-Length' in response.headers:
+            headers['Content-Length'] = response.headers['Content-Length']
         
         return Response(stream_with_context(generate()), headers=headers)
     
