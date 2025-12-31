@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import youtubedl from 'youtube-dl-exec';
 
 export const runtime = 'nodejs';
 export const maxDuration = 10;
@@ -26,7 +25,7 @@ interface VideoInfo {
 
 /**
  * API Route: /api/video-info
- * Extracts YouTube video metadata using youtube-dl-exec
+ * Extracts YouTube video metadata using Cobalt API
  */
 export async function POST(request: NextRequest) {
   try {
@@ -40,74 +39,121 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch video info using youtube-dl-exec with yt-dlp
-    const info = await youtubedl(url.trim(), {
-      dumpSingleJson: true,
-      noCheckCertificates: true,
-      noWarnings: true,
-      preferFreeFormats: true,
-      addHeader: [
-        'referer:youtube.com',
-        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      ]
-    }, {
-      binaryPath: '/Users/krishyogi/.pyenv/shims/yt-dlp'
-    } as any);
-
-    // Type assertion for info object
-    const videoInfo = info as any;
-
-    // Filter video formats (with both video and audio)
-    const videoFormats: VideoFormat[] = (videoInfo.formats || [])
-      .filter((f: any) => f.vcodec !== 'none' && f.acodec !== 'none' && f.height)
-      .map((f: any) => ({
-        quality: f.format_id,
-        qualityLabel: `${f.height}p`,
-        container: f.ext || 'mp4',
-        hasVideo: true,
-        hasAudio: true,
-        url: f.url,
-        contentLength: f.filesize?.toString(),
-        mimeType: `video/${f.ext || 'mp4'}`,
-      }))
-      .sort((a: any, b: any) => {
-        const heightA = parseInt(a.qualityLabel);
-        const heightB = parseInt(b.qualityLabel);
-        return heightB - heightA; // Sort descending
-      });
-
-    // Remove duplicates by quality
-    const seenQualities = new Set<string>();
-    const uniqueVideoFormats = videoFormats.filter((format) => {
-      if (seenQualities.has(format.qualityLabel)) {
-        return false;
-      }
-      seenQualities.add(format.qualityLabel);
-      return true;
+    // Use Cobalt API for video info
+    const cobaltResponse = await fetch('https://api.cobalt.tools/api/json', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        url: url.trim(),
+        vQuality: 'max',
+        filenamePattern: 'basic',
+        isAudioOnly: false,
+      }),
     });
 
-    // Filter audio-only formats
-    const audioFormats: VideoFormat[] = (videoInfo.formats || [])
-      .filter((f: any) => f.vcodec === 'none' && f.acodec !== 'none' && f.abr)
-      .map((f: any) => ({
-        quality: `${Math.round(f.abr)}kbps`,
-        qualityLabel: `${Math.round(f.abr)}kbps`,
-        container: f.ext || 'm4a',
-        hasVideo: false,
+    if (!cobaltResponse.ok) {
+      const errorData = await cobaltResponse.json().catch(() => ({}));
+      throw new Error(errorData.text || 'Failed to fetch video info');
+    }
+
+    const cobaltData = await cobaltResponse.json();
+
+    // Get video metadata using YouTube oEmbed API (for title, author, thumbnail)
+    const videoId = extractVideoId(url.trim());
+    if (!videoId) {
+      throw new Error('Could not extract video ID from URL');
+    }
+
+    const oembedResponse = await fetch(
+      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
+    );
+
+    let title = 'Unknown';
+    let author = 'Unknown';
+    let thumbnail = '';
+
+    if (oembedResponse.ok) {
+      const oembedData = await oembedResponse.json();
+      title = oembedData.title || 'Unknown';
+      author = oembedData.author_name || 'Unknown';
+      thumbnail = oembedData.thumbnail_url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+    } else {
+      thumbnail = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+    }
+
+    // Create format list based on Cobalt response
+    const formats: VideoFormat[] = [];
+    const audioFormats: VideoFormat[] = [];
+
+    if (cobaltData.url) {
+      // Single format returned
+      formats.push({
+        quality: 'best',
+        qualityLabel: 'Best Quality',
+        container: 'mp4',
+        hasVideo: true,
         hasAudio: true,
-        url: f.url,
-        contentLength: f.filesize?.toString(),
-        mimeType: `audio/${f.ext || 'm4a'}`,
-      }))
-      .slice(0, 3);
+        url: cobaltData.url,
+        mimeType: 'video/mp4',
+      });
+    }
+
+    if (cobaltData.picker && Array.isArray(cobaltData.picker)) {
+      // Multiple formats available
+      cobaltData.picker.forEach((item: any, index: number) => {
+        if (item.type === 'video') {
+          formats.push({
+            quality: `format_${index}`,
+            qualityLabel: item.quality || 'Video',
+            container: 'mp4',
+            hasVideo: true,
+            hasAudio: true,
+            url: item.url,
+            mimeType: 'video/mp4',
+          });
+        }
+      });
+    }
+
+    // Add audio-only option
+    const audioResponse = await fetch('https://api.cobalt.tools/api/json', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        url: url.trim(),
+        isAudioOnly: true,
+        aFormat: 'mp3',
+      }),
+    });
+
+    if (audioResponse.ok) {
+      const audioData = await audioResponse.json();
+      if (audioData.url) {
+        audioFormats.push({
+          quality: 'audio',
+          qualityLabel: 'Audio (MP3)',
+          container: 'mp3',
+          hasVideo: false,
+          hasAudio: true,
+          url: audioData.url,
+          mimeType: 'audio/mpeg',
+        });
+      }
+    }
 
     const response: VideoInfo = {
-      title: videoInfo.title || 'Unknown',
-      thumbnail: videoInfo.thumbnail || '',
-      duration: formatDuration(videoInfo.duration || 0),
-      author: videoInfo.uploader || videoInfo.channel || 'Unknown',
-      formats: uniqueVideoFormats,
-      audioFormats: audioFormats,
+      title,
+      thumbnail,
+      duration: '0:00', // Cobalt doesn't provide duration
+      author,
+      formats,
+      audioFormats,
     };
 
     return NextResponse.json(response, {
@@ -132,13 +178,18 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
+function extractVideoId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ];
 
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) {
+      return match[1];
+    }
   }
-  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+
+  return null;
 }

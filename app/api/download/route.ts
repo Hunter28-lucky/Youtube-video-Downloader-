@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import youtubedl from 'youtube-dl-exec';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 /**
  * API Route: /api/download
- * Downloads YouTube videos using youtube-dl-exec
+ * Redirects to download URL from Cobalt API
  */
 export async function GET(request: NextRequest) {
     try {
         const searchParams = request.nextUrl.searchParams;
         const url = searchParams.get('url');
-        const quality = searchParams.get('quality') || 'highest';
         const type = searchParams.get('type') || 'video';
 
         if (!url) {
@@ -22,89 +20,34 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Get video info first
-        const info = await youtubedl(url, {
-            dumpSingleJson: true,
-            noCheckCertificates: true,
-            noWarnings: true,
-        }, {
-            binaryPath: '/Users/krishyogi/.pyenv/shims/yt-dlp'
-        } as any);
+        // Use Cobalt API
+        const cobaltResponse = await fetch('https://api.cobalt.tools/api/json', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+                url: url.trim(),
+                isAudioOnly: type === 'audio',
+                aFormat: type === 'audio' ? 'mp3' : undefined,
+                vQuality: 'max',
+            }),
+        });
 
-        // Type assertion for info object
-        const videoData = info as any;
-
-        // Determine format selector
-        let formatSelector: string;
-        if (type === 'audio') {
-            formatSelector = 'bestaudio';
-        } else if (quality === 'highest') {
-            formatSelector = 'best';
-        } else {
-            // Try to match quality (e.g., "720p" -> height=720)
-            const height = quality.replace('p', '');
-            formatSelector = `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]`;
+        if (!cobaltResponse.ok) {
+            const errorData = await cobaltResponse.json().catch(() => ({}));
+            throw new Error(errorData.text || 'Failed to get download URL');
         }
 
-        // Create filename
-        const sanitizedTitle = (videoData.title || 'video')
-            .replace(/[^\w\s-]/g, '')
-            .replace(/\s+/g, '_')
-            .substring(0, 50);
+        const cobaltData = await cobaltResponse.json();
 
-        const extension = type === 'audio' ? 'm4a' : 'mp4';
-        const filename = `${sanitizedTitle}.${extension}`;
+        if (!cobaltData.url) {
+            throw new Error('No download URL available');
+        }
 
-        // Download and stream
-        const stream = youtubedl.exec(url, {
-            format: formatSelector,
-            output: '-', // Output to stdout
-            noCheckCertificates: true,
-            noWarnings: true,
-            addHeader: [
-                'referer:youtube.com',
-                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            ]
-        }, {
-            binaryPath: '/Users/krishyogi/.pyenv/shims/yt-dlp'
-        } as any);
-
-        // Convert to web ReadableStream
-        const readableStream = new ReadableStream({
-            async start(controller) {
-                if (!stream.stdout) {
-                    controller.error(new Error('No stdout from youtube-dl'));
-                    return;
-                }
-
-                stream.stdout.on('data', (chunk: Buffer) => {
-                    controller.enqueue(new Uint8Array(chunk));
-                });
-
-                stream.stdout.on('end', () => {
-                    controller.close();
-                });
-
-                stream.stdout.on('error', (error: Error) => {
-                    console.error('Stream error:', error);
-                    controller.error(error);
-                });
-
-                // Handle process errors
-                stream.on('error', (error: Error) => {
-                    console.error('Process error:', error);
-                    controller.error(error);
-                });
-            },
-        });
-
-        return new NextResponse(readableStream, {
-            headers: {
-                'Content-Type': type === 'audio' ? 'audio/mp4' : 'video/mp4',
-                'Content-Disposition': `attachment; filename="${filename}"`,
-                'Cache-Control': 'no-cache',
-            },
-        });
+        // Redirect to the download URL
+        return NextResponse.redirect(cobaltData.url);
 
     } catch (error) {
         console.error('Download error:', error);
