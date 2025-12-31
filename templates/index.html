@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIF Drop - Media Downloader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 GIF Drop</h1>
+            <p class="subtitle">Download media from YouTube, Instagram, Pinterest, and Tenor</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="openTab('home')">Home</button>
+            <button class="tab-button" onclick="openTab('tenor')">Tenor Search</button>
+        </div>
+
+        <!-- Home Tab -->
+        <div id="home" class="tab-content active">
+            <div class="drop-zone" id="dropZone">
+                <p>Drag & Drop a link here or paste below</p>
+            </div>
+
+            <div class="url-input-section">
+                <input type="text" id="urlInput" placeholder="Paste URL here..." />
+                <button onclick="downloadFromUrl()">Download</button>
+            </div>
+
+            <div class="button-grid">
+                <button class="feature-btn" onclick="showDialog('youtube')">
+                    📺 Download YouTube Video
+                </button>
+                <button class="feature-btn" onclick="showDialog('instagram')">
+                    📸 Download Instagram Video
+                </button>
+                <button class="feature-btn" onclick="showDialog('pinterest')">
+                    📌 Download Pinterest Media
+                </button>
+            </div>
+
+            <div id="statusMessage" class="status-message"></div>
+
+            <footer>
+                <p>Created by Shahid | @shahidgrows</p>
+                <p class="support-text">Supports Tenor GIFs, Images, YouTube, Instagram, and Pinterest</p>
+            </footer>
+        </div>
+
+        <!-- Tenor Tab -->
+        <div id="tenor" class="tab-content">
+            <div class="search-section">
+                <input type="text" id="tenorSearch" placeholder="Search Tenor GIFs..." />
+                <button onclick="searchTenor()">Search</button>
+            </div>
+
+            <div id="tenorResults" class="gif-grid"></div>
+        </div>
+    </div>
+
+    <!-- YouTube Dialog -->
+    <div id="youtubeDialog" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeDialog('youtube')">&times;</span>
+            <h2>Download YouTube Video</h2>
+            <input type="text" id="ytUrl" placeholder="Paste YouTube URL here..." />
+            <button onclick="fetchResolutions()">Fetch Resolutions</button>
+            
+            <div class="format-options">
+                <label>
+                    <input type="radio" name="ytFormat" value="video" checked onchange="toggleResolution()">
+                    Video + Audio
+                </label>
+                <label>
+                    <input type="radio" name="ytFormat" value="audio" onchange="toggleResolution()">
+                    Audio Only
+                </label>
+            </div>
+
+            <div id="resolutionSection">
+                <label for="resolution">Resolution:</label>
+                <select id="resolution" disabled>
+                    <option value="">Best Available</option>
+                </select>
+            </div>
+
+            <div class="modal-buttons">
+                <button onclick="downloadYouTube()">Download</button>
+                <button onclick="closeDialog('youtube')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Instagram Dialog -->
+    <div id="instagramDialog" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeDialog('instagram')">&times;</span>
+            <h2>Download Instagram Video</h2>
+            <input type="text" id="igUrl" placeholder="Paste Instagram URL here..." />
+            
+            <div class="format-options">
+                <label>
+                    <input type="radio" name="igFormat" value="video" checked>
+                    Video + Audio
+                </label>
+                <label>
+                    <input type="radio" name="igFormat" value="audio">
+                    Audio Only
+                </label>
+            </div>
+
+            <div class="modal-buttons">
+                <button onclick="downloadInstagram()">Download</button>
+                <button onclick="closeDialog('instagram')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pinterest Dialog -->
+    <div id="pinterestDialog" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeDialog('pinterest')">&times;</span>
+            <h2>Download Pinterest Media</h2>
+            <input type="text" id="pinUrl" placeholder="Paste Pinterest URL here..." />
+
+            <div class="modal-buttons">
+                <button onclick="downloadPinterest()">Download</button>
+                <button onclick="closeDialog('pinterest')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="spinner-overlay">
+        <div class="spinner"></div>
+        <p>Downloading...</p>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
