@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { YtdlCore } from '@ybd-project/ytdl-core';
 
-export const runtime = 'nodejs';
+export const runtime = 'edge'; // Use edge runtime for better performance
 export const maxDuration = 10;
+
+// List of public Invidious instances
+const INVIDIOUS_INSTANCES = [
+  'https://invidious.fdn.fr',
+  'https://inv.nadeko.net',
+  'https://invidious.nerdvpn.de',
+  'https://yt.artemislena.eu',
+  'https://invidious.protokolla.fi',
+];
 
 interface VideoFormat {
   quality: string;
@@ -24,12 +32,9 @@ interface VideoInfo {
   audioFormats: VideoFormat[];
 }
 
-// Create ytdl instance
-const ytdl = new YtdlCore({});
-
 /**
  * API Route: /api/video-info
- * Extracts YouTube video metadata using @ybd-project/ytdl-core
+ * Extracts YouTube video metadata using Invidious API
  */
 export async function POST(request: NextRequest) {
   try {
@@ -54,63 +59,65 @@ export async function POST(request: NextRequest) {
 
     const videoId = videoIdMatch[1];
 
-    // Fetch video info
-    const info = await ytdl.getFullInfo(`https://www.youtube.com/watch?v=${videoId}`);
-    const videoDetails = info.videoDetails;
+    // Try each Invidious instance until one works
+    let videoData: any = null;
+    let lastError: Error | null = null;
+
+    for (const instance of INVIDIOUS_INSTANCES) {
+      try {
+        const response = await fetch(`${instance}/api/v1/videos/${videoId}`, {
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          videoData = await response.json();
+          break;
+        }
+      } catch (err) {
+        lastError = err as Error;
+        continue;
+      }
+    }
+
+    if (!videoData) {
+      throw lastError || new Error('All Invidious instances failed');
+    }
 
     // Filter video formats (with both video and audio)
-    const videoFormats: VideoFormat[] = info.formats
-      .filter((format: any) => format.hasVideo && format.hasAudio && format.qualityLabel)
-      .map((format: any) => ({
-        quality: String(format.quality || 'unknown'),
-        qualityLabel: String(format.qualityLabel || 'Unknown'),
-        container: String(format.container || 'mp4'),
-        hasVideo: format.hasVideo,
-        hasAudio: format.hasAudio,
-        url: format.url,
-        contentLength: format.contentLength,
-        mimeType: String(format.mimeType || 'video/mp4'),
+    const videoFormats: VideoFormat[] = (videoData.formatStreams || [])
+      .filter((f: any) => f.container === 'mp4')
+      .map((f: any) => ({
+        quality: f.quality || 'unknown',
+        qualityLabel: f.qualityLabel || f.quality || 'Unknown',
+        container: f.container || 'mp4',
+        hasVideo: true,
+        hasAudio: true,
+        url: f.url,
+        mimeType: f.type || 'video/mp4',
       }));
 
-    // Remove duplicate quality labels
-    const seenQualities = new Set<string>();
-    const uniqueVideoFormats = videoFormats.filter((format) => {
-      if (seenQualities.has(format.qualityLabel)) {
-        return false;
-      }
-      seenQualities.add(format.qualityLabel);
-      return true;
-    });
-
-    // Filter audio-only formats
-    const audioFormats: VideoFormat[] = info.formats
-      .filter((format: any) => !format.hasVideo && format.hasAudio && format.audioBitrate)
-      .map((format: any) => ({
-        quality: format.audioBitrate ? `${format.audioBitrate}kbps` : 'Audio',
-        qualityLabel: format.audioBitrate ? `${format.audioBitrate}kbps` : 'Audio',
-        container: String(format.container || 'm4a'),
+    // Get audio formats from adaptive formats
+    const audioFormats: VideoFormat[] = (videoData.adaptiveFormats || [])
+      .filter((f: any) => f.type?.includes('audio'))
+      .slice(0, 3)
+      .map((f: any) => ({
+        quality: f.bitrate ? `${Math.round(f.bitrate / 1000)}kbps` : 'Audio',
+        qualityLabel: f.bitrate ? `${Math.round(f.bitrate / 1000)}kbps` : 'Audio',
+        container: f.container || 'm4a',
         hasVideo: false,
         hasAudio: true,
-        url: format.url,
-        contentLength: format.contentLength,
-        mimeType: String(format.mimeType || 'audio/mp4'),
-      }))
-      .slice(0, 3);
-
-    // Sort video formats by quality
-    const sortOrder = ['2160p', '1440p', '1080p', '720p', '480p', '360p', '240p', '144p'];
-    uniqueVideoFormats.sort((a, b) => {
-      const aIndex = sortOrder.indexOf(a.qualityLabel);
-      const bIndex = sortOrder.indexOf(b.qualityLabel);
-      return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-    });
+        url: f.url,
+        mimeType: f.type || 'audio/mp4',
+      }));
 
     const response: VideoInfo = {
-      title: videoDetails.title,
-      thumbnail: videoDetails.thumbnails[videoDetails.thumbnails.length - 1]?.url || '',
-      duration: formatDuration(parseInt(String(videoDetails.lengthSeconds || 0))),
-      author: videoDetails.author?.name || 'Unknown',
-      formats: uniqueVideoFormats,
+      title: videoData.title || 'Unknown',
+      thumbnail: videoData.videoThumbnails?.[0]?.url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+      duration: formatDuration(videoData.lengthSeconds || 0),
+      author: videoData.author || 'Unknown',
+      formats: videoFormats,
       audioFormats: audioFormats,
     };
 
