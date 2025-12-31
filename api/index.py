@@ -86,31 +86,51 @@ def stream_file(encoded_url):
     try:
         import base64
         url = base64.urlsafe_b64decode(encoded_url).decode('utf-8')
-        filename = request.args.get('filename', 'download')
+        filename = request.args.get('filename', 'download.mp4')
         
         # Get file from URL with streaming
-        response = requests.get(url, stream=True, timeout=60, headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        response = requests.get(url, stream=True, timeout=120, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Encoding': 'identity',
+            'Connection': 'keep-alive'
         })
-        response.raise_for_status()
+        
+        if response.status_code != 200:
+            return jsonify({'error': f'Failed to fetch video: {response.status_code}'}), 500
         
         def generate():
-            for chunk in response.iter_content(chunk_size=65536):
-                if chunk:
-                    yield chunk
+            try:
+                for chunk in response.iter_content(chunk_size=1024*1024):  # 1MB chunks
+                    if chunk:
+                        yield chunk
+            except Exception as e:
+                print(f"Streaming error: {str(e)}")
+        
+        # Determine content type
+        content_type = response.headers.get('Content-Type', 'application/octet-stream')
+        if 'video' not in content_type.lower() and 'audio' not in content_type.lower():
+            # Default to video/mp4 for video files
+            if filename.endswith(('.mp4', '.m4a', '.webm')):
+                content_type = 'video/mp4'
+            elif filename.endswith('.mp3'):
+                content_type = 'audio/mpeg'
         
         headers = {
-            'Content-Type': response.headers.get('Content-Type', 'video/mp4'),
+            'Content-Type': content_type,
             'Content-Disposition': f'attachment; filename="{filename}"',
-            'Cache-Control': 'no-cache'
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
         }
         
         if 'Content-Length' in response.headers:
             headers['Content-Length'] = response.headers['Content-Length']
         
-        return Response(stream_with_context(generate()), headers=headers)
+        return Response(stream_with_context(generate()), headers=headers, direct_passthrough=True)
     
     except Exception as e:
+        print(f"Stream error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/youtube/resolutions', methods=['POST'])
