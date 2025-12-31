@@ -68,7 +68,7 @@ async function downloadFromUrl() {
     }
     
     showSpinner();
-    showStatus('Downloading...', 'loading');
+    showStatus('Preparing download...', 'loading');
     
     try {
         const response = await fetch('/api/download', {
@@ -80,8 +80,17 @@ async function downloadFromUrl() {
         const data = await response.json();
         hideSpinner();
         
-        if (data.success) {
-            showStatus(`✓ Downloaded: ${data.filename}`, 'success');
+        if (data.success && data.downloadUrl) {
+            // Trigger browser download
+            const a = document.createElement('a');
+            a.href = data.downloadUrl;
+            a.download = data.filename || 'download';
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            showStatus(`✓ Download started: ${data.filename}`, 'success');
             document.getElementById('urlInput').value = '';
         } else {
             showStatus(`✗ Error: ${data.error}`, 'error');
@@ -154,16 +163,7 @@ async function downloadYouTube() {
     const url = document.getElementById('ytUrl').value;
     const format = document.querySelector('input[name="ytFormat"]:checked').value;
     const audioOnly = (format === 'audio');
-    const resolution = audioOnly ? null : document.getElementById('resolution').value;
-    
-    if (!url) {
-        alert('Please enter a URL');
-        return;
-    }
-    
-    closeDialog('youtube');
-    showSpinner();
-    showStatus('Downloading YouTube video...', 'loading');
+    const resoluPreparing YouTube download...', 'loading');
     
     try {
         const response = await fetch('/api/download', {
@@ -173,8 +173,24 @@ async function downloadYouTube() {
                 url: url,
                 type: 'youtube',
                 audioOnly: audioOnly,
-                resolution: resolution ? parseInt(resolution) : null,
-                audioCodec: 'mp3',
+                resolution: resolution ? parseInt(resolution) : null
+            })
+        });
+        
+        const data = await response.json();
+        hideSpinner();
+        
+        if (data.success && data.downloadUrl) {
+            // Trigger browser download
+            const a = document.createElement('a');
+            a.href = data.downloadUrl;
+            a.download = data.filename || 'video.mp4';
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            showStatus(`✓ Download start
                 videoCodec: 'h264'
             })
         });
@@ -200,14 +216,7 @@ async function downloadInstagram() {
     const format = document.querySelector('input[name="igFormat"]:checked').value;
     const audioOnly = (format === 'audio');
     
-    if (!url) {
-        alert('Please enter a URL');
-        return;
-    }
-    
-    closeDialog('instagram');
-    showSpinner();
-    showStatus('Downloading Instagram video...', 'loading');
+    if (!url) {Preparing Instagram download...', 'loading');
     
     try {
         const response = await fetch('/api/download', {
@@ -223,6 +232,22 @@ async function downloadInstagram() {
         const data = await response.json();
         hideSpinner();
         
+        if (data.success && data.downloadUrl) {
+            // Trigger browser download
+            const a = document.createElement('a');
+            a.href = data.downloadUrl;
+            a.download = data.filename || 'instagram.mp4';
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            showStatus(`✓ Download start
+        });
+        
+        const data = await response.json();
+        hideSpinner();
+        
         if (data.success) {
             showStatus(`✓ Downloaded: ${data.filename}`, 'success');
             document.getElementById('igUrl').value = '';
@@ -230,23 +255,32 @@ async function downloadInstagram() {
             showStatus(`✗ Error: ${data.error}`, 'error');
         }
     } catch (error) {
+        hideSpinPreparing Pinterest download...', 'loading');
+    
+    try {
+        const response = await fetch('/api/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url: url,
+                type: 'pinterest'
+            })
+        });
+        
+        const data = await response.json();
         hideSpinner();
-        showStatus(`✗ Error: ${error.message}`, 'error');
-    }
-}
-
-// Pinterest functions
-async function downloadPinterest() {
-    const url = document.getElementById('pinUrl').value;
-    
-    if (!url) {
-        alert('Please enter a URL');
-        return;
-    }
-    
-    closeDialog('pinterest');
-    showSpinner();
-    showStatus('Downloading Pinterest media...', 'loading');
+        
+        if (data.success && data.downloadUrl) {
+            // Trigger browser download
+            const a = document.createElement('a');
+            a.href = data.downloadUrl;
+            a.download = data.filename || 'pinterest.jpg';
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            showStatus(`✓ Download startest media...', 'loading');
     
     try {
         const response = await fetch('/api/download', {
@@ -323,31 +357,16 @@ function displayTenorResults(results) {
     if (results.length === 0) {
         resultsDiv.innerHTML = '<p style="text-align: center; padding: 40px;">No results found</p>';
         return;
-    }
+    // Direct download for GIFs
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title}.gif` || 'tenor.gif';
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
     
-    resultsDiv.innerHTML = '';
-    
-    results.forEach(gif => {
-        const gifItem = document.createElement('div');
-        gifItem.className = 'gif-item';
-        
-        gifItem.innerHTML = `
-            <img src="${gif.preview_url}" alt="${gif.title}" loading="lazy">
-            <button onclick="downloadTenorGif('${gif.full_url}', '${gif.title}')">Download</button>
-        `;
-        
-        resultsDiv.appendChild(gifItem);
-    });
-}
-
-async function downloadTenorGif(url, title) {
-    showSpinner();
-    showStatus('Downloading GIF...', 'loading');
-    
-    try {
-        const response = await fetch('/api/download', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+    showStatus(`✓ Download started: ${title}.gif`, 'success');       headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 url: url,
                 type: 'general'
